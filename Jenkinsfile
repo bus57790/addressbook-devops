@@ -33,7 +33,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME} .'
+                sh 'docker build -t "$IMAGE_NAME" .'
             }
         }
 
@@ -47,11 +47,7 @@ pipeline {
 
     post {
         failure {
-            sh '''
-                curl -X POST -H 'Content-type: application/json' \
-                  --data '{"text":"❌ Jenkins Pipeline Failed: '"$JOB_NAME"' [Build #'"$BUILD_NUMBER"'] failed."}' \
-                  "$SLACK_WEBHOOK"
-            '''
+            sh 'curl -X POST -H "Content-type: application/json" --data "{\\"text\\":\\"❌ Jenkins Pipeline Failed: $JOB_NAME [Build #$BUILD_NUMBER] failed.\\"}" "$SLACK_WEBHOOK"'
         }
     }
 }
