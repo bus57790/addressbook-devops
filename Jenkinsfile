@@ -51,23 +51,22 @@ pipeline {
         }
     }
 
+stage('Security Scan & Notify') {
+    steps {
+        script {
+            // Run Trivy scan - only exit 1 on vulnerabilities with available fixes
+            sh 'trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 local/addressbook-web:8'
+        }
+    }
     post {
-        always {
-            cleanWs()
-        }
-        success {
-            sh """
-                curl -X POST -H 'Content-type: application/json' \
-                --data '{"text":"✅ Jenkins Pipeline Success: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] deployed successfully."}' \
-                ${env.SLACK_WEBHOOK}
-            """
-        }
         failure {
-            sh """
-                curl -X POST -H 'Content-type: application/json' \
-                --data '{"text":"❌ Jenkins Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] failed."}' \
-                ${env.SLACK_WEBHOOK}
-            """
+            withCredentials([string(credentialsId: 'slack-webhook-id', variable: 'SLACK_WEBHOOK')]) {
+                sh '''
+                    curl -X POST -H 'Content-type: application/json' \
+                      --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
+                      "$SLACK_WEBHOOK"
+                '''
+            }
         }
     }
 }
