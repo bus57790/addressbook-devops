@@ -3,8 +3,7 @@ pipeline {
 
     environment {
         APP_NAME = "addressbook-web"
-        IMAGE_NAME = "local/addressbook-web:${env.BUILD_NUMBER}"
-        SLACK_WEBHOOK = credentials('slack-webhook-url')
+        IMAGE_NAME = "local/addressbook-web"
         PATH = "/usr/local/bin:/usr/bin:/bin:${env.PATH}"
     }
 
@@ -33,23 +32,27 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-            sh """
-                    docker build -t local/addressbook-web:${env.BUILD_NUMBER} .
-                """
+                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
             }
         }
 
         stage('Deploy to Local Server') {
             steps {
-                sh 'docker-compose down || docker compose down || true'
-                sh 'docker-compose up -d --build || docker compose up -d --build'
+                sh 'docker compose down || docker-compose down || true'
+                sh 'docker compose up -d --build || docker-compose up -d --build'
             }
         }
     }
 
     post {
         failure {
-            sh 'curl -X POST -H "Content-type: application/json" --data "{\\"text\\":\\"❌ Jenkins Pipeline Failed: $JOB_NAME [Build #$BUILD_NUMBER] failed.\\"}" "$SLACK_WEBHOOK"'
+            withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL')]) {
+                sh '''
+                    curl -X POST -H 'Content-type: application/json' \
+                      --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
+                      "${SLACK_URL}"
+                '''
+            }
         }
     }
 }
