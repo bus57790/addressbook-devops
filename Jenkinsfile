@@ -5,7 +5,7 @@ pipeline {
         APP_NAME = "addressbook-web"
         IMAGE_NAME = "local/addressbook-web:${BUILD_NUMBER}"
         SONAR_SCANNER_HOME = tool 'SonarScanner'
-        SLACK_WEBHOOK = credentials('slack-webhook-url')
+        SLACK_WEBHOOK = credentials('https://hooks.slack.com/services/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')
         TWILIO_ACCOUNT_SID = credentials('twilio-sid')
         TWILIO_AUTH_TOKEN = credentials('twilio-token')
         TWILIO_FROM = '+1234567890'
