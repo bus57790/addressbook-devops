@@ -33,14 +33,14 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_NAME} ."
+                sh 'docker build -t ${IMAGE_NAME} .'
             }
         }
 
         stage('Deploy to Local Server') {
             steps {
-                sh "docker-compose down || docker compose down || true"
-                sh "docker-compose up -d --build || docker compose up -d --build"
+                sh 'docker-compose down || docker compose down || true'
+                sh 'docker-compose up -d --build || docker compose up -d --build'
             }
         }
     }
