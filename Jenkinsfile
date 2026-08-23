@@ -4,14 +4,7 @@ pipeline {
     environment {
         APP_NAME = "addressbook-web"
         IMAGE_NAME = "local/addressbook-web:${env.BUILD_NUMBER}"
-        SONAR_SCANNER_HOME = tool 'SonarQubeServer'
         SLACK_WEBHOOK = credentials('slack-webhook-url')
-        
-        // Uncomment Twilio environment variables if configured in Jenkins Credentials
-        // TWILIO_ACCOUNT_SID = credentials('twilio-sid')
-        // TWILIO_AUTH_TOKEN  = credentials('twilio-token')
-        // TWILIO_FROM        = '+1234567890'
-        // NOTIFICATION_TO    = '+0987654321'
     }
 
     stages {
@@ -23,13 +16,17 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube-Server') {
-                    sh """
-                        ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
-                        -Dsonar.projectKey=${APP_NAME} \
-                        -Dsonar.sources=. \
-                        -Dsonar.exclusions=**/*.html
-                    """
+                script {
+                    // Resolve tool inside the stage script block
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('SonarQube-Server') {
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${APP_NAME} \
+                            -Dsonar.sources=. \
+                            -Dsonar.exclusions=**/*.html
+                        """
+                    }
                 }
             }
         }
@@ -42,7 +39,6 @@ pipeline {
 
         stage('Trivy Security Scan') {
             steps {
-                // Scans image for vulnerabilities
                 sh "trivy image --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME}"
             }
         }
@@ -60,24 +56,18 @@ pipeline {
             cleanWs()
         }
         success {
-            script {
-                // Corrected Slack Notification variable syntax
-                sh """
-                    curl -X POST -H 'Content-type: application/json' \
-                    --data '{"text":"✅ Jenkins Pipeline Success: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] deployed successfully."}' \
-                    ${SLACK_WEBHOOK}
-                """
-            }
+            sh """
+                curl -X POST -H 'Content-type: application/json' \
+                --data '{"text":"✅ Jenkins Pipeline Success: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] deployed successfully."}' \
+                ${env.SLACK_WEBHOOK}
+            """
         }
         failure {
-            script {
-                // Corrected Slack Failure Alert variable syntax
-                sh """
-                    curl -X POST -H 'Content-type: application/json' \
-                    --data '{"text":"❌ Jenkins Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] failed."}' \
-                    ${SLACK_WEBHOOK}
-                """
-            }
+            sh """
+                curl -X POST -H 'Content-type: application/json' \
+                --data '{"text":"❌ Jenkins Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] failed."}' \
+                ${env.SLACK_WEBHOOK}
+            """
         }
     }
 }
