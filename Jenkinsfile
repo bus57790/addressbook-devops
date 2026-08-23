@@ -17,7 +17,6 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    // Resolve tool inside the stage script block
                     def scannerHome = tool 'SonarScanner'
                     withSonarQubeEnv('SonarQube-Server') {
                         sh """
@@ -39,7 +38,8 @@ pipeline {
 
         stage('Trivy Security Scan') {
             steps {
-                sh "trivy image --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME}"
+                // Uses --ignore-unfixed to bypass unpatched OS vulnerabilities and dynamic tag matching
+                sh "trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 ${IMAGE_NAME}"
             }
         }
 
@@ -51,22 +51,13 @@ pipeline {
         }
     }
 
-stage('Security Scan & Notify') {
-    steps {
-        script {
-            // Run Trivy scan - only exit 1 on vulnerabilities with available fixes
-            sh 'trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 local/addressbook-web:8'
-        }
-    }
     post {
         failure {
-            withCredentials([string(credentialsId: 'slack-webhook-id', variable: 'SLACK_WEBHOOK')]) {
-                sh '''
-                    curl -X POST -H 'Content-type: application/json' \
-                      --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
-                      "$SLACK_WEBHOOK"
-                '''
-            }
+            sh '''
+                curl -X POST -H 'Content-type: application/json' \
+                  --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
+                  "$SLACK_WEBHOOK"
+            '''
         }
     }
 }
