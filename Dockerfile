@@ -1,4 +1,5 @@
-FROM python:3.11-slim
+# Example: Switch to alpine or updated minimal debian image
+FROM node:20-alpine
 
 # Install system dependencies required for pyzbar / zbar
 RUN apt-get update && apt-get install -y \
