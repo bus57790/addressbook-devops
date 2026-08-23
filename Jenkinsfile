@@ -1,6 +1,7 @@
 pipeline {
     agent any
 
+// Reference the credential ID stored in Jenkins instead of hardcoding the URL
     environment {
         APP_NAME = "addressbook-web"
         IMAGE_NAME = "local/addressbook-web:${BUILD_NUMBER}"
