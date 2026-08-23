@@ -1,13 +1,13 @@
-# Example: Switch to alpine or updated minimal debian image
-FROM node:20-alpine
+FROM python:3.11-slim
 
-# Install system dependencies required for pyzbar / zbar
-RUN apt-get update && apt-get install -y \
+# Install zbar runtime and gcc compiler required for pyzbar
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libzbar0 \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
