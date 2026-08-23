@@ -49,7 +49,7 @@ pipeline {
         failure {
             sh '''
                 curl -X POST -H 'Content-type: application/json' \
-                  --data "{\\"text\\":\\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\\"}" \
+                  --data '{"text":"❌ Jenkins Pipeline Failed: '"$JOB_NAME"' [Build #'"$BUILD_NUMBER"'] failed."}' \
                   "$SLACK_WEBHOOK"
             '''
         }
