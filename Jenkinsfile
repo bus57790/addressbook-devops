@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         APP_NAME = "addressbook-web"
-        IMAGE_NAME = "local/addressbook-web"
         PATH = "/usr/local/bin:/usr/bin:/bin:${env.PATH}"
     }
 
@@ -32,14 +31,18 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
+                script {
+                    def imgName = "local/addressbook-web:${env.BUILD_NUMBER}"
+                    // The hyphen below is standard ASCII. 
+                    sh "docker build -t ${imgName} ."
+                }
             }
         }
 
         stage('Deploy to Local Server') {
             steps {
-                sh 'docker compose down || docker-compose down || true'
-                sh 'docker compose up -d --build || docker-compose up -d --build'
+                sh 'docker compose down || true'
+                sh 'docker compose up -d --build'
             }
         }
     }
@@ -47,11 +50,16 @@ pipeline {
     post {
         failure {
             withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL')]) {
-                sh '''
-                    curl -X POST -H 'Content-type: application/json' \
-                      --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
-                      "${SLACK_URL}"
-                '''
+                script {
+                    // 1. Construct the payload in Groovy to avoid shell quote stripping
+                    def payload = '{"text":"❌ Jenkins Pipeline Failed: ' + env.JOB_NAME + ' [Build #' + env.BUILD_NUMBER + '] failed."}'
+                    
+                    // 2. Write it securely to a file in the workspace
+                    writeFile file: 'slack_payload.json', text: payload
+                    
+                    // 3. Pass the file directly to curl
+                    sh 'curl -X POST -H "Content-type: application/json" -d @slack_payload.json "$SLACK_URL"'
+                }
             }
         }
     }
