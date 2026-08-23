@@ -4,7 +4,7 @@ pipeline {
     environment {
         APP_NAME = "addressbook-web"
         IMAGE_NAME = "local/addressbook-web:${env.BUILD_NUMBER}"
-        SONAR_SCANNER_HOME = tool 'SonarScanner'
+        SONAR_SCANNER_HOME = tool 'SonarQubeServer'
         SLACK_WEBHOOK = credentials('slack-webhook-url')
         
         // Uncomment Twilio environment variables if configured in Jenkins Credentials
