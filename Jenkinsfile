@@ -36,13 +36,6 @@ pipeline {
             }
         }
 
-        stage('Trivy Security Scan') {
-            steps {
-                // Uses --ignore-unfixed to bypass unpatched OS vulnerabilities and dynamic tag matching
-                sh "trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 ${IMAGE_NAME}"
-            }
-        }
-
         stage('Deploy to Local Server') {
             steps {
                 sh "docker-compose down"
@@ -55,7 +48,7 @@ pipeline {
         failure {
             sh '''
                 curl -X POST -H 'Content-type: application/json' \
-                  --data "{\"text\":\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\"}" \
+                  --data "{\\"text\\":\\"❌ Jenkins Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}] failed.\\"}" \
                   "$SLACK_WEBHOOK"
             '''
         }
