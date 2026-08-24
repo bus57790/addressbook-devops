@@ -32,7 +32,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} .'
+                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
             }
         }
 
@@ -46,16 +46,14 @@ pipeline {
 
     post {
         always {
-            // Ensures cleanWs runs inside workspace node context
             cleanWs()
         }
         failure {
             withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL')]) {
                 script {
-                    // Uses standard env access instead of raw variable references
                     def jsonText = "{\"text\":\"❌ Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]\"}"
                     writeFile file: 'slack.json', text: jsonText
-                    sh 'curl -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
+                    sh 'curl -s -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
                 }
             }
         }
