@@ -8,6 +8,11 @@ services:
       POSTGRES_PASSWORD: postgrespassword
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d addressbook"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - app-net
 
@@ -22,7 +27,8 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgrespassword
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     networks:
       - app-net
 
@@ -31,4 +37,4 @@ volumes:
 
 networks:
   app-net:
-    driver: bridge
+    driver: bridge    driver: bridge
