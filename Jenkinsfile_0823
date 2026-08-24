@@ -32,7 +32,12 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+<<<<<<< HEAD
+                // Using single quotes avoids Groovy variable interpolation character bugs
+                sh 'docker build -t local/addressbook-web:${BUILD_NUMBER} .'
+=======
                 sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+>>>>>>> feature/testing
             }
         }
 
@@ -45,6 +50,18 @@ pipeline {
     }
 
     post {
+<<<<<<< HEAD
+        failure {
+            withCredentials([string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL')]) {
+                script {
+                    // Safe native string building without plugins
+                    def jsonText = '{"text":"❌ Jenkins Pipeline Failed: ' + env.JOB_NAME + ' [Build #' + env.BUILD_NUMBER + '] failed."}'
+                    
+                    // Native writeFile step present in core Jenkins
+                    writeFile file: 'slack.json', text: jsonText
+                    
+                    sh 'curl -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
+=======
         always {
             cleanWs()
         }
@@ -54,6 +71,7 @@ pipeline {
                     def jsonText = "{\"text\":\"❌ Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]\"}"
                     writeFile file: 'slack.json', text: jsonText
                     sh 'curl -s -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
+>>>>>>> feature/testing
                 }
             }
         }
