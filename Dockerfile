@@ -2,13 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Upgrade system packages to pull latest Debian OS security patches
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libzbar0 && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+EXPOSE 5000
 
 CMD ["python", "app.py"]
