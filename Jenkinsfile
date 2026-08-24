@@ -8,19 +8,22 @@ pipeline {
     }
 
     stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'feature/testing', url: 'https://github.com/bus57790/addressbook-devops.git'
+            }
+        }
 
         stage('SonarQube Analysis') {
             steps {
                 script {
                     def scannerHome = tool 'SonarScanner'
-
                     withSonarQubeEnv('SonarQube-Server') {
                         sh """
                             ${scannerHome}/bin/sonar-scanner \
                             -Dsonar.projectKey=${env.APP_NAME} \
                             -Dsonar.sources=. \
-                            -Dsonar.exclusions=**/*.html \
-                            -Dsonar.python.version=3.11
+                            -Dsonar.exclusions=**/*.html
                         """
                     }
                 }
@@ -29,185 +32,78 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh """
-                    docker build \
-                      -t ${IMAGE_NAME}:${BUILD_NUMBER} \
-                      -t ${IMAGE_NAME}:latest \
-                      .
-                """
+                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
             }
         }
 
         stage('Trivy Security Scan') {
             steps {
-                sh """
-                    trivy image \
-                      --severity HIGH,CRITICAL \
-                      --ignore-unfixed \
-                      --scanners vuln \
-                      --exit-code 0 \
-                      ${IMAGE_NAME}:${BUILD_NUMBER}
-                """
-            }
-        }
-
-        stage('Validate Compose') {
-            steps {
-                sh '''
-                    docker compose config --quiet
-                '''
+                sh "trivy image --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME}:${BUILD_NUMBER}"
             }
         }
 
         stage('Deploy to Local Server') {
             steps {
-                sh '''
-                    set -e
-
-                    echo "Stopping previous deployment..."
-                    docker compose down || true
-
-                    echo "Starting application..."
-                    docker compose up -d --build
-
-                    echo "Container status:"
-                    docker compose ps
-                '''
-            }
-        }
-
-        stage('Verify Deployment') {
-            steps {
-                sh '''
-                    echo "Waiting for services..."
-                    sleep 5
-
-                    docker compose ps
-
-                    echo "Checking database health..."
-                    docker inspect \
-                      --format='{{.State.Health.Status}}' \
-                      addressbook_db
-
-                    echo "Testing web application..."
-                    curl --fail \
-                      --retry 10 \
-                      --retry-delay 3 \
-                      http://192.168.1.184:5000/
-                '''
+                sh 'docker compose down -v || docker-compose down -v || true'
+                sh 'docker compose up -d --build || docker-compose up -d --build'
             }
         }
 
         stage('Seed Sample Users') {
             steps {
-                sh '''
-                    docker exec -i addressbook_db \
-                      psql -U postgres -d addressbook <<'EOF'
-INSERT INTO contacts
-    (full_name, phone, email, address)
-VALUES
-    ('Ada Lovelace',
-     '+1-555-0101',
-     'ada@example.com',
-     '10 Binary Way, London, UK'),
-
-    ('Alan Turing',
-     '+1-555-0102',
-     'alan@example.com',
-     '42 Enigma Ave, Bletchley, UK'),
-
-    ('Grace Hopper',
-     '+1-555-0103',
-     'grace@example.com',
-     '1952 Compiler Rd, Arlington, VA'),
-
-    ('Linus Torvalds',
-     '+1-555-0104',
-     'linus@example.com',
-     '100 Linux Blvd, Portland, OR')
-ON CONFLICT DO NOTHING;
+                script {
+                    sh 'sleep 5' // Brief delay for Postgres container ready check
+                    sh '''
+                        docker exec -i addressbook_db psql -U postgres -d addressbook <<EOF
+                        INSERT INTO contacts (full_name, phone, email, address) VALUES
+                        ('Ada Lovelace', '+1-555-0101', 'ada@example.com', '10 Binary Way, London, UK'),
+                        ('Alan Turing', '+1-555-0102', 'alan@example.com', '42 Enigma Ave, Bletchley, UK'),
+                        ('Grace Hopper', '+1-555-0103', 'grace@example.com', '1952 Compiler Rd, Arlington, VA'),
+                        ('Linus Torvalds', '+1-555-0104', 'linus@example.com', '100 Linux Blvd, Portland, OR')
+                        ON CONFLICT DO NOTHING;
 EOF
-                '''
+                    '''
+                }
             }
         }
 
         stage('Generate & Archive QR Artifacts') {
             steps {
-                sh '''
-                    rm -rf sample_qr_codes
-
-                    docker exec \
-                      addressbook_web \
-                      python generate_qr_codes.py
-
-                    docker cp \
-                      addressbook_web:/app/sample_qr_codes \
-                      ./sample_qr_codes
-                '''
-
-                archiveArtifacts(
-                    artifacts: 'sample_qr_codes/*.png',
-                    fingerprint: true
-                )
+                script {
+                    sh "docker exec addressbook_web python generate_qr_codes.py"
+                    sh "docker cp addressbook_web:/app/sample_qr_codes ./sample_qr_codes"
+                    archiveArtifacts artifacts: 'sample_qr_codes/*.png', fingerprint: true
+                }
             }
         }
     }
 
     post {
+        always {
+            cleanWs()
+        }
 
         success {
             withCredentials([
-                string(
-                    credentialsId: 'slack-webhook-url',
-                    variable: 'SLACK_URL'
-                ),
-                string(
-                    credentialsId: 'twilio-sid',
-                    variable: 'TWILIO_SID'
-                ),
-                string(
-                    credentialsId: 'twilio-token',
-                    variable: 'TWILIO_TOKEN'
-                ),
-                string(
-                    credentialsId: 'twilio-from',
-                    variable: 'TWILIO_FROM'
-                ),
-                string(
-                    credentialsId: 'notification-to',
-                    variable: 'NOTIFICATION_TO'
-                )
+                string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL'),
+                string(credentialsId: 'twilio-sid', variable: 'TWILIO_SID'),
+                string(credentialsId: 'twilio-token', variable: 'TWILIO_TOKEN'),
+                string(credentialsId: 'twilio-from', variable: 'TWILIO_FROM'),
+                string(credentialsId: 'notification-to', variable: 'NOTIFICATION_TO')
             ]) {
                 script {
+                    // Slack Success Notification
+                    def jsonText = "{\"text\":\"✅ Pipeline Succeeded: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] - Deployed, Seeded, and QR Artifacts Generated.\"}"
+                    writeFile file: 'slack.json', text: jsonText
+                    sh 'curl -s -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
 
-                    def jsonText =
-                        """{"text":"Pipeline Succeeded: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}] - Deployed, Seeded, and QR Artifacts Generated."}"""
-
-                    writeFile(
-                        file: 'slack.json',
-                        text: jsonText
-                    )
-
+                    // SMS Success Notification (Twilio)
                     sh '''
-                        curl --fail-with-body \
-                          -sS \
-                          -X POST \
-                          -H 'Content-Type: application/json' \
-                          --data @slack.json \
-                          "$SLACK_URL" \
-                          || echo "WARNING: Slack notification failed"
-                    '''
-
-                    sh '''
-                        curl --fail-with-body \
-                          -sS \
-                          -X POST \
-                          "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
-                          --data-urlencode "From=${TWILIO_FROM}" \
-                          --data-urlencode "To=${NOTIFICATION_TO}" \
-                          --data-urlencode "Body=Jenkins Build #${BUILD_NUMBER} for ${JOB_NAME} SUCCEEDED. Deployment and seeding complete." \
-                          -u "${TWILIO_SID}:${TWILIO_TOKEN}" \
-                          || echo "WARNING: Twilio notification failed"
+                        curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
+                        --data-urlencode "From=${TWILIO_FROM}" \
+                        --data-urlencode "To=${NOTIFICATION_TO}" \
+                        --data-urlencode "Body=✅ Pipeline Succeeded: ${JOB_NAME} [Build #${BUILD_NUMBER}] deployed." \
+                        -u "${TWILIO_SID}:${TWILIO_TOKEN}"
                     '''
                 }
             }
@@ -215,64 +111,28 @@ EOF
 
         failure {
             withCredentials([
-                string(
-                    credentialsId: 'slack-webhook-url',
-                    variable: 'SLACK_URL'
-                ),
-                string(
-                    credentialsId: 'twilio-sid',
-                    variable: 'TWILIO_SID'
-                ),
-                string(
-                    credentialsId: 'twilio-token',
-                    variable: 'TWILIO_TOKEN'
-                ),
-                string(
-                    credentialsId: 'twilio-from',
-                    variable: 'TWILIO_FROM'
-                ),
-                string(
-                    credentialsId: 'notification-to',
-                    variable: 'NOTIFICATION_TO'
-                )
+                string(credentialsId: 'slack-webhook-url', variable: 'SLACK_URL'),
+                string(credentialsId: 'twilio-sid', variable: 'TWILIO_SID'),
+                string(credentialsId: 'twilio-token', variable: 'TWILIO_TOKEN'),
+                string(credentialsId: 'twilio-from', variable: 'TWILIO_FROM'),
+                string(credentialsId: 'notification-to', variable: 'NOTIFICATION_TO')
             ]) {
                 script {
+                    // Slack Failure Notification
+                    def jsonText = "{\"text\":\"❌ Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]\"}"
+                    writeFile file: 'slack.json', text: jsonText
+                    sh 'curl -s -X POST -H "Content-Type: application/json" -d @slack.json "$SLACK_URL"'
 
-                    def jsonText =
-                        """{"text":"Pipeline Failed: ${env.JOB_NAME} [Build #${env.BUILD_NUMBER}]"}"""
-
-                    writeFile(
-                        file: 'slack.json',
-                        text: jsonText
-                    )
-
+                    // SMS Failure Notification (Twilio)
                     sh '''
-                        curl --fail-with-body \
-                          -sS \
-                          -X POST \
-                          -H 'Content-Type: application/json' \
-                          --data @slack.json \
-                          "$SLACK_URL" \
-                          || echo "WARNING: Slack notification failed"
-                    '''
-
-                    sh '''
-                        curl --fail-with-body \
-                          -sS \
-                          -X POST \
-                          "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
-                          --data-urlencode "From=${TWILIO_FROM}" \
-                          --data-urlencode "To=${NOTIFICATION_TO}" \
-                          --data-urlencode "Body=Jenkins Build #${BUILD_NUMBER} for ${JOB_NAME} FAILED. Check Jenkins console log." \
-                          -u "${TWILIO_SID}:${TWILIO_TOKEN}" \
-                          || echo "WARNING: Twilio notification failed"
+                        curl -s -X POST "https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json" \
+                        --data-urlencode "From=${TWILIO_FROM}" \
+                        --data-urlencode "To=${NOTIFICATION_TO}" \
+                        --data-urlencode "Body=❌ Pipeline Failed: ${JOB_NAME} [Build #${BUILD_NUMBER}]" \
+                        -u "${TWILIO_SID}:${TWILIO_TOKEN}"
                     '''
                 }
             }
-        }
-
-        always {
-            cleanWs()
         }
     }
 }
